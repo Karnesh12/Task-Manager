@@ -299,7 +299,7 @@ const getDashboardData = async (req, res) => {
         ]);
         const taskPriorityLevels = taskPriorities.reduce((acc, priority) => {
             acc[priority] = 
-            taskPriorityLevelsRaw.find((item) = item._id === priority)?.count || 0;
+            taskPriorityLevelsRaw.find((item) => item._id === priority)?.count || 0;
             return acc;
         }, {});
 
@@ -307,7 +307,7 @@ const getDashboardData = async (req, res) => {
         const recentTasks = await Task.find()
         .sort({ createdAt: -1 })
         .limit(10)
-        .select("title status proiority dueDate createdAt");
+        .select("title status priority dueDate createdAt");
 
         res.status(200).json({
             statistics: {
