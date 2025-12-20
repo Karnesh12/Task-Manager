@@ -6,7 +6,7 @@ const { rawListeners } = require("../models/User");
 //@access Private
 const getTasks = async (req, res) => {
     try {
-        const { status } = req.querry;
+        const { status } = req.query;
         let filter = {};
 
         if (status) {
@@ -57,7 +57,7 @@ const getTasks = async (req, res) => {
         const completedTasks = await Task.countDocuments({
             ...filter,
             status: "Completed",
-            ...Task(req.user.role !== "admin" && { assignedTo: req.user._id }),
+            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
         });
 
         res.json({
