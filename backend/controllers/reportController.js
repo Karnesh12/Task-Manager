@@ -23,16 +23,21 @@ const exportTasksReport = async(req, res) => {
         ];
 
         tasks.forEach((task) => {
-            const assignedTo = task.assignedTo
-            .map((user) => `${user.name} (${user.email})`)
-            .json(", ");
+            const assignedTo = (task.assignedTo || [])
+                .map((user) => `${user.name} (${user.email})`)
+                .join(", ");
+
+            const formattedDueDate = task.dueDate
+                ? task.dueDate.toISOString().split("T")[0]
+                : "";
+
             worksheet.addRow({
                 _id: task._id,
                 title: task.title,
                 description: task.description,
                 priority: task.priority,
                 status: task.status,
-                dueDate: task.dueDate.toISOString().split("T")[0],
+                dueDate: formattedDueDate,
                 assignedTo: assignedTo || "Unassigned",
             });
         });
@@ -117,7 +122,7 @@ const exportUserReport = async(req, res) => {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         );
         res.setHeader(
-            "Content-Dispotition",
+            "Content-Disposition",
             'attachment; filename="users_report.xlsx"'
         );
 
