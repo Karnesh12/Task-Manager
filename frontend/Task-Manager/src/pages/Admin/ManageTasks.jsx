@@ -11,6 +11,8 @@ import toast from "react-hot-toast";
 const ManageTasks = () => {
 
     const [allTasks, setAllTasks] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const [tabs, setTabs] = useState([]);
     const [filterStatus, setFilterStatus] = useState("All");
@@ -18,7 +20,7 @@ const ManageTasks = () => {
     const navigate = useNavigate();
 
     const getAllTasks = async () => {
-
+        setLoading(true);
         try {
             const response = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, {
                 params: {
@@ -41,6 +43,8 @@ const ManageTasks = () => {
             setTabs(statusArray);
         } catch (error) {
             console.error("Error fetching users:", error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -50,6 +54,7 @@ const ManageTasks = () => {
 
     // download task report
     const handleDownloadReport = async () => {
+        setIsDownloading(true);
         try {
             const response = await axiosInstance.get(API_PATHS.REPORTS.EXPORT_TASKS, {
                 responseType: "blob",
@@ -67,11 +72,13 @@ const ManageTasks = () => {
         } catch (error) {
             console.error("Error downloading Task details", error);
             toast.error("Failed to download Task details. Please try again.");
+        } finally {
+            setIsDownloading(false);
         }
     };
 
     useEffect(() => {
-        getAllTasks(filterStatus);
+        getAllTasks();
         return () => {};
     }, [filterStatus]);
 
@@ -85,9 +92,10 @@ const ManageTasks = () => {
                         <button
                         className="flex lg:hidden download-btn"
                         onClick={handleDownloadReport}
+                        disabled={isDownloading}
                         >
                             <LuFileSpreadsheet className="text-lg" />
-                            Download Report
+                            {isDownloading ? "Downloading..." : "Download Report"}
                         </button>
                     </div>
 
@@ -99,35 +107,45 @@ const ManageTasks = () => {
                             setActiveTab={setFilterStatus}
                             />
 
-                            <button className="hidden lg:flex download-btn" onClick={handleDownloadReport}>
+                            <button className="hidden lg:flex download-btn" onClick={handleDownloadReport} disabled={isDownloading}>
                                 <LuFileSpreadsheet className="text-lg" />
-                                Download Report
+                                {isDownloading ? "Downloading..." : "Download Report"}
                             </button>
                         </div>
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                    {allTasks?.map((item, index) => (
-                        <TaskCard
-                        key={item._id}
-                        title={item.title}
-                        description={item.description}
-                        priority={item.priority}
-                        status={item.status}
-                        progress={item.progress}
-                        createdAt={item.createdAt}
-                        dueDate={item.dueDate}
-                        assignedTo={item.assignedTo?.map((item) => item.profileImageUrl)}
-                        attachmentCount={item.attachments?.length || 0}
-                        completedTodoCount={item.completedTodoCount || 0}
-                        todoChecklist={item.todoChecklist || []}
-                        onClick={() => {
-                            handleClick(item);
-                        }}
-                        />
-                    ))}
-                </div>
+                {loading ? (
+                    <div className="flex items-center justify-center h-[40vh]">
+                        <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                    </div>
+                ) : allTasks?.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        {allTasks.map((item) => (
+                            <TaskCard
+                            key={item._id}
+                            title={item.title}
+                            description={item.description}
+                            priority={item.priority}
+                            status={item.status}
+                            progress={item.progress}
+                            createdAt={item.createdAt}
+                            dueDate={item.dueDate}
+                            assignedTo={item.assignedTo?.map((item) => item.profileImageUrl)}
+                            attachmentCount={item.attachments?.length || 0}
+                            completedTodoCount={item.completedTodoCount || 0}
+                            todoChecklist={item.todoChecklist || []}
+                            onClick={() => {
+                                handleClick(item);
+                            }}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-[40vh] text-gray-500">
+                        No tasks found.
+                    </div>
+                )}
             </div>
         </DashboardLayout>
     )

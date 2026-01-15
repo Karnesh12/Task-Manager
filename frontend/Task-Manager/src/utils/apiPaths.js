@@ -27,6 +27,7 @@ export const API_PATHS = {
 
         UPDATE_TASK_STATUS: (taskId) => `/api/tasks/${taskId}/status`,
         UPDATE_TODO_CHECKLIST: (taskId) => `/api/tasks/${taskId}/todo`,
+        GET_TASK_ACTIVITY: (taskId) => `/api/tasks/${taskId}/activity`,
     },
 
     REPORTS: {

@@ -16,6 +16,7 @@ const SignUp = () => {
     const [password, setPassword] = useState("");
     const [adminInviteToken, setAdminInviteToken] = useState('')
 
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
     const {updateUser} = useContext(UserContext)
@@ -44,6 +45,7 @@ const SignUp = () => {
     
             setError("");
     
+            setLoading(true);
             //SignUp API Call
             try {
 
@@ -80,6 +82,8 @@ const SignUp = () => {
               } else {
                 setError("Something went wrong. Please try again.");
               }
+            } finally {
+                setLoading(false);
             }
         };
 
@@ -130,8 +134,8 @@ const SignUp = () => {
 
                         {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
 
-                        <button type="submit" className="btn-primary">
-                          SIGN UP
+                        <button type="submit" className="btn-primary" disabled={loading}>
+                          {loading ? "SIGNING UP..." : "SIGN UP"}
                         </button>
 
                         <p className="text-[13px] text-slate-800 mt-3">

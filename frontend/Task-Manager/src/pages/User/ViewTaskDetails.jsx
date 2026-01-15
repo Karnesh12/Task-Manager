@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import axiosInstance from "../../utils/axiosInstance";
+import toast from "react-hot-toast";
 import { API_PATHS } from "../../utils/apiPaths";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import moment from "moment";
+import ActivityLog from "../../components/ActivityLog";
 import AvatarGroup from "../../components/AvatarGroup";
 import { LuSquareArrowOutUpRight } from "react-icons/lu";
 
@@ -11,6 +13,8 @@ const ViewTaskDetails = () => {
 
     const { id } = useParams();
     const [task, setTask] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [updatingTodo, setUpdatingTodo] = useState(null);
 
     const getStatusTagColor = (status) => {
         switch (status) {
@@ -27,6 +31,7 @@ const ViewTaskDetails = () => {
 
     // get Task info by ID
     const getTaskDetailsByID = async () => {
+        setLoading(true);
         try {
             const response = await axiosInstance.get(
                 API_PATHS.TASKS.GET_TASK_BY_ID(id)
@@ -38,32 +43,35 @@ const ViewTaskDetails = () => {
             }
         } catch (error) {
             console.error("Error fetching users:", error);
+        } finally {
+            setLoading(false);
         }
     };
 
     // handle todo check
     const updateTodoChecklist = async (index) => {
-            const todoChecklist = [...task?.todoChecklist];
-            const taskId = id;
+        setUpdatingTodo(index);
 
-            if (todoChecklist && todoChecklist[index]) {
-                todoChecklist[index].completed = !todoChecklist[index].completed;
+        const newChecklist = task.todoChecklist.map((item, i) =>
+            i === index ? { ...item, completed: !item.completed } : item
+        );
 
-                try {
-                    const response = await axiosInstance.put(
-                        API_PATHS.TASKS.UPDATE_TODO_CHECKLIST(taskId),
-                        { todoChecklist }
-                    );
-                    if (response.status === 200) {
-                        setTask(response.data?.task || task);
-                    } else {
-                        // Optionally revert the toggle if the API call fails.
-                        todoChecklist[index].completed = !todoChecklist[index].completed
-                    }
-                } catch (error) {
-                    todoChecklist[index].completed = !todoChecklist[index].completed;
-                }
+        try {
+            const response = await axiosInstance.put(
+                API_PATHS.TASKS.UPDATE_TODO_CHECKLIST(id),
+                { todoChecklist: newChecklist }
+            );
+
+            if (response.data?.task) {
+                setTask(response.data.task);
             }
+        } catch (error) {
+            console.error("Error updating checklist:", error);
+            toast.error("Failed to update task.");
+            // No need to revert UI state as we didn't change it optimistically
+        } finally {
+            setUpdatingTodo(null);
+        }
     };
 
     // handle attachment link Cick
@@ -83,8 +91,13 @@ const ViewTaskDetails = () => {
 
     return (
         <DashboardLayout activeMenu='My Tasks'>
+            {loading ? (
+                <div className="flex items-center justify-center h-[60vh]">
+                    <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                </div>
+            ) : (
             <div className="mt-5">
-                {task && (
+                {task ? (
                 <div className="grid grid-cols-1 md:grid-cols-4 mt-4">
                     <div className="form-card col-span-3">
                         <div className="flex items-center justify-between">
@@ -144,6 +157,7 @@ const ViewTaskDetails = () => {
                                 text={item.text}
                                 isChecked={item?.completed}
                                 onChange={() => updateTodoChecklist(index)}
+                                isLoading={updatingTodo === index}
                                 />
                             ))}
                         </div>
@@ -164,10 +178,17 @@ const ViewTaskDetails = () => {
                                 ))}
                             </div>
                         )}
+
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                            <ActivityLog taskId={id} />
+                        </div>
                     </div>
                 </div>
+                ) : (
+                    <div className="flex items-center justify-center h-[60vh] text-gray-500">Task details not found.</div>
                 )}
             </div>
+            )}
         </DashboardLayout>
     );
 };
@@ -183,16 +204,25 @@ const InfoBox = ({ label,value }) => {
     </p></>
 };
 
-const TodoCheckList = ({ text, isChecked, onChange }) => {
+const TodoCheckList = ({ text, isChecked, onChange, isLoading }) => {
     return <div className="flex items-center gap-3 p-3">
-        <input
-        type="checkbox"
-        checked={isChecked}
-        onChange={onChange}
-        className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded-sm outline-none cursor-pointer"
-        />
-
-        <p className="text-[13px] text-gray-800">{text}</p>
+        {isLoading ? (
+            <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+        ) : (
+            <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={onChange}
+                disabled={isLoading}
+                className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded-sm outline-none cursor-pointer"
+            />
+        )}
+        <p
+            className={`text-[13px] ${isChecked ? "text-gray-400 line-through" : "text-gray-800"
+                }`}
+        >
+            {text}
+        </p>
     </div>
 };
 

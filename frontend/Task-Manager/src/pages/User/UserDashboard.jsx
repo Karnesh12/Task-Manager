@@ -25,6 +25,7 @@ const UserDashboard = () => {
     const [dashboardData, setDashboardData] = useState(null);
     const [pieChartData, setPieChartData] = useState([]);
     const [barChartData, setBarChartData] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     //Prepare Chart Data
     const prepareChartData = (data) => {
@@ -49,6 +50,7 @@ const UserDashboard = () => {
     };
 
     const getDashboardData = async () => {
+        setLoading(true);
         try {
             const response = await axiosInstance.get(
                 API_PATHS.TASKS.GET_USER_DASHBOARD_DATA
@@ -59,12 +61,23 @@ const UserDashboard = () => {
             }
         } catch (error) {
             console.error("Error fetching users:", error);
+        } finally {
+            setLoading(false);
         }
     };
 
     const onSeeMore = () => {
         navigate('/user/tasks')
     }
+
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+
+        if (hour >= 5 && hour < 12) return "Good Morning";
+        if (hour >= 12 && hour < 17) return "Good Afternoon";
+        if (hour >= 17 && hour < 21) return "Good Evening";
+        return "Good Night";
+    };
 
     useEffect(() => {
         getDashboardData();
@@ -73,10 +86,16 @@ const UserDashboard = () => {
     }, []);
     
     return <DashboardLayout activeMenu="Dashboard">
+        {loading ? (
+            <div className="flex items-center justify-center h-[60vh]">
+                <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+            </div>
+        ) : (
+        <>
         <div className="card my-5">
             <div>
                 <div className="col-span-3">
-                    <h2 className="text-xl md:text-2xl">Good Morning! {user?.name}</h2>
+                    <h2 className="text-xl md:text-2xl">{getGreeting()}, {user?.name}</h2>
                     <p className="text-xs md:text-[13px] text-gray-400 mt-1.5">
                         {moment().format("dddd Do MMM YYYY")}
                     </p>
@@ -159,6 +178,8 @@ const UserDashboard = () => {
                 </div>
             </div>
         </div>
+        </>
+        )}
     </DashboardLayout>;
 };
 

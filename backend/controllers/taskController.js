@@ -1,5 +1,22 @@
 const Task = require("../models/Task");
+const TaskActivity = require("../models/TaskActivity");
 const { rawListeners } = require("../models/User");
+const moment = require("moment");
+
+const logActivity = async (taskId, performedBy, performedByName, performedByProfileImageUrl, action, description) => {
+  try {
+    await TaskActivity.create({
+      taskId,
+      performedBy,
+      performedByName,
+      performedByProfileImageUrl,
+      action,
+      description,
+    });
+  } catch (error) {
+    console.error("Failed to log activity:", error);
+  }
+};
 
 //@desc Get all tasks (admin: all, User: only assigned tasks)
 //@route GET /api/tasks/
@@ -124,6 +141,15 @@ const createTask = async (req, res) => {
             attachments,
         });
 
+        await logActivity(
+            task._id,
+            req.user._id,
+            req.user.name,
+            req.user.profileImageUrl,
+            "Task Created",
+            `Task "${task.title}" was created.`
+        );
+
         res.status(201).json({ message: "Task created successfully", task });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
@@ -138,6 +164,32 @@ const updateTask = async (req, res) => {
         const task = await Task.findById(req.params.id);
 
         if (!task) return res.status(404).json({ message: "Task not found" });
+
+        const changes = [];
+        if (req.body.title && task.title !== req.body.title) {
+            changes.push(`title to "${req.body.title}"`);
+        }
+        if (req.body.description && task.description !== req.body.description) {
+            changes.push('description');
+        }
+        if (req.body.priority && task.priority !== req.body.priority) {
+            changes.push(`priority to "${req.body.priority}"`);
+        }
+        if (req.body.dueDate && new Date(task.dueDate).toISOString() !== new Date(req.body.dueDate).toISOString()) {
+            changes.push(`due date to "${moment(req.body.dueDate).format('MMM Do YYYY')}"`);
+        }
+        if (req.body.assignedTo) {
+            const oldIds = task.assignedTo.map(u => u.toString()).sort();
+            const newIds = [...req.body.assignedTo].sort();
+            if (JSON.stringify(oldIds) !== JSON.stringify(newIds)) {
+                changes.push('assignees');
+            }
+        }
+
+        // Handle checklist text changes if needed, separate from toggling
+        if (req.body.todoChecklist && JSON.stringify(task.todoChecklist.map(t => t.text)) !== JSON.stringify(req.body.todoChecklist.map(t => t.text || t))) {
+            changes.push('TODO checklist');
+        }
 
         task.title = req.body.title || task.title;
         task.description = req.body.description || task.description;
@@ -156,6 +208,18 @@ const updateTask = async (req, res) => {
         }
 
         const updatedTask = await task.save();
+
+        if (changes.length > 0) {
+            await logActivity(
+                updatedTask._id,
+                req.user._id,
+                req.user.name,
+                req.user.profileImageUrl,
+                "Task Details Updated",
+                `Updated ${changes.join(', ')}.`
+            );
+        }
+
         res.json({ message: "Task updated successfully", updatedTask });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
@@ -170,6 +234,15 @@ const deleteTask = async (req, res) => {
         const task = await Task.findById(req.params.id);
 
         if (!task) return res.status(404).json({ message: "Task not found" });
+
+        await logActivity(
+            task._id,
+            req.user._id,
+            req.user.name,
+            req.user.profileImageUrl,
+            "Task Deleted",
+            `Task "${task.title}" was deleted.`
+        );
 
         await task.deleteOne();
         res.json({ message: "Task deleted seccessfully" });
@@ -194,11 +267,23 @@ const updateTaskStatus = async (req, res) => {
             return res.status(403).json({ message: "Not authorized" });
         }
 
+        const oldStatus = task.status;
         task.status = req.body.status || task.status;
 
         if (task.status === "Completed") {
             task.todoChecklist.forEach((item) => (item.completed = true));
             task.progress = 100;
+        }
+
+        if (oldStatus !== task.status) {
+            await logActivity(
+                task._id,
+                req.user._id,
+                req.user.name,
+                req.user.profileImageUrl,
+                "Status Changed",
+                `Status changed from "${oldStatus}" to "${task.status}".`
+            );
         }
 
         await task.save();
@@ -218,12 +303,15 @@ const updateTaskChecklist = async (req, res) => {
 
         if  (!task) return res.status(404).json({ message: "Task not found" });
 
-        if (!task.assignedTo.includes(req.user._id) && req.user.role !== "admin") {
+        const isAssigned = task.assignedTo.some(id => id.equals(req.user._id));
+
+        if (!isAssigned && req.user.role !== "admin") {
             return res 
             .status(403)
             .json({ message: "Not authorized to update chacklist" });
         }
 
+        const oldChecklist = task.todoChecklist.map(item => item.toObject());
         task.todoChecklist = todoChecklist; //Replace with updated checklist
 
         //Auto-update progress based on chacklist completion
@@ -244,6 +332,20 @@ const updateTaskChecklist = async (req, res) => {
         }
 
         await task.save();
+
+        // Log checklist toggles
+        const newChecklist = task.todoChecklist;
+        const maxLength = Math.max(oldChecklist.length, newChecklist.length);
+        for (let i = 0; i < maxLength; i++) {
+            const oldItem = oldChecklist[i];
+            const newItem = newChecklist[i];
+
+            if (oldItem && newItem && oldItem.text === newItem.text && oldItem.completed !== newItem.completed) {
+                await logActivity(task._id, req.user._id, req.user.name, req.user.profileImageUrl, "Checklist Item Toggled",
+                    `"${newItem.text}" was marked as ${newItem.completed ? 'complete' : 'incomplete'}.`
+                );
+            }
+        }
         const updatedTask = await Task.findById(req.params.id).populate(
             "assignedTo",
             "name email profileImageUrl"
@@ -396,6 +498,30 @@ const getUserDashboardData = async (req, res) => {
     }
 };
 
+//@desc Get task activity log
+//@route GET /api/tasks/:id/activity
+//@access Private
+const getTaskActivity = async (req, res) => {
+    try {
+      const task = await Task.findById(req.params.id);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+  
+      // Admin can see all activity. Members can only see for assigned tasks.
+      const isAssigned = task.assignedTo.some(id => id.equals(req.user._id));
+
+      if (req.user.role !== 'admin' && !isAssigned) {
+        return res.status(403).json({ message: "Not authorized to view this task's activity" });
+      }
+  
+      const activities = await TaskActivity.find({ taskId: req.params.id }).sort({ createdAt: -1 });
+      res.json(activities);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  };
+
 module.exports = {
     getTasks,
     getTaskById,
@@ -406,4 +532,5 @@ module.exports = {
     updateTaskChecklist,
     getDashboardData,
     getUserDashboardData,
+    getTaskActivity,
 };

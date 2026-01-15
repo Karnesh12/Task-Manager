@@ -25,6 +25,7 @@ const Dashboard = () => {
     const [dashboardData, setDashboardData] = useState(null);
     const [pieChartData, setPieChartData] = useState([]);
     const [barChartData, setBarChartData] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     //Prepare Chart Data
     const prepareChartData = (data) => {
@@ -49,6 +50,7 @@ const Dashboard = () => {
     };
 
     const getDashboardData = async () => {
+        setLoading(true);
         try {
             const response = await axiosInstance.get(
                 API_PATHS.TASKS.GET_DASHBOARD_DATA
@@ -59,6 +61,8 @@ const Dashboard = () => {
             }
         } catch (error) {
             console.error("Error fetching users:", error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -82,6 +86,12 @@ const Dashboard = () => {
     }, []);
     
     return <DashboardLayout activeMenu="Dashboard">
+        {loading ? (
+            <div className="flex items-center justify-center h-[60vh]">
+                <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+            </div>
+        ) : (
+        <>
         <div className="card my-5">
             <div>
                 <div className="col-span-3">
@@ -168,6 +178,8 @@ const Dashboard = () => {
                 </div>
             </div>
         </div>
+        </>
+        )}
     </DashboardLayout>;
 };
 

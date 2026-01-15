@@ -11,6 +11,7 @@ const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
 
     const {updateUser} = useContext(UserContext)
     const navigate = useNavigate();
@@ -33,6 +34,7 @@ const Login = () => {
 
         //Login API Call
         try {
+            setLoading(true);
             const response = await axiosInstance.post(API_PATHS.AUTH.LOGIN, {
                 email,
                 password,
@@ -57,6 +59,8 @@ const Login = () => {
             } else {
                 setError("Something went wrong. Please try again.");
             }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -87,8 +91,8 @@ const Login = () => {
 
                 {error && <p className="text-red-500 text-xs pb-2.5">{error}</p>}
 
-                <button type="submit" className="btn-primary">
-                    LOGIN
+                <button type="submit" className="btn-primary" disabled={loading}>
+                    {loading ? "LOGGING IN..." : "LOGIN"}
                 </button>
 
                 <p className="text-[13px] text-slate-800 mt-3">

@@ -13,6 +13,7 @@ import TodoListInput from "../../components/Inputs/TodoListInput";
 import AddAttachmentsInput from "../../components/Inputs/AddAttachmentsInput";
 import Modal from "../../components/Modal";
 import DeleteAlert from "../../components/DeleteAlert";
+import ActivityLog from "../../components/ActivityLog";
 
 const CreateTask = () => {
     
@@ -34,6 +35,7 @@ const CreateTask = () => {
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [isFetching, setIsFetching] = useState(false);
 
     const [openDeleteAlert, setOpenDeleteAlert] = useState(false);
 
@@ -55,7 +57,7 @@ const CreateTask = () => {
     };
 
     //Create Task
-    const CreateTask = async () => {
+    const handleCreateTask = async () => {
         setLoading(true);
 
         try {
@@ -146,11 +148,12 @@ const CreateTask = () => {
             return;
         }
 
-        CreateTask();
+        handleCreateTask();
     };
 
     //get Task info by ID
     const getTaskDetailsByID = async () => {
+        setIsFetching(true);
         try {
             const response = await axiosInstance.get(
                 API_PATHS.TASKS.GET_TASK_BY_ID(taskId)
@@ -175,6 +178,8 @@ const CreateTask = () => {
             }
         } catch (error) {
             console.error("Error fetching users:", error);
+        } finally {
+            setIsFetching(false);
         }
     };
 
@@ -203,8 +208,13 @@ const CreateTask = () => {
     }, [taskId]);
 
     return (
-        <DashboardLayout activeMenu="Create Task">
+        <DashboardLayout activeMenu={taskId ? "Manage Tasks" : "Create Task"}>
             <div className="mt-5">
+                {isFetching ? (
+                    <div className="flex items-center justify-center h-[40vh]">
+                        <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                    </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-4 mt-4">
                     <div className="form-card col-span-3">
                         <div className="flex items-center justify-between">
@@ -323,11 +333,18 @@ const CreateTask = () => {
                             onClick={handleSubmit}
                             disabled={loading}
                             >
-                                {taskId ? "UPDATE TASK" : "CREATE TASK"}
+                                {taskId ? (loading ? "UPDATING..." : "UPDATE TASK") : (loading ? "CREATING..." : "CREATE TASK")}
                             </button>
                         </div>
+
+                        {taskId && (
+                            <div className="border-t border-gray-200 mt-6 pt-6">
+                                <ActivityLog taskId={taskId} />
+                            </div>
+                        )}
                     </div>
                 </div>
+                )}
             </div>
 
             <Modal
