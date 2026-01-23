@@ -1,6 +1,6 @@
 const Task = require("../models/Task");
 const TaskActivity = require("../models/TaskActivity");
-const { rawListeners } = require("../models/User");
+const User = require("../models/User");
 const moment = require("moment");
 
 const logActivity = async (taskId, performedBy, performedByName, performedByProfileImageUrl, action, description) => {
@@ -18,11 +18,55 @@ const logActivity = async (taskId, performedBy, performedByName, performedByProf
   }
 };
 
+// Helper to check and update overdue status
+const checkOverdue = async (task, user) => {
+    if (task.status === "Completed") return;
+
+    const now = new Date();
+    const dueDate = new Date(task.dueDate);
+
+    if (dueDate < now && !task.isOverdue) {
+        task.isOverdue = true;
+        // If blocked, we keep status as Blocked but flag as overdue
+        if (task.status !== "Blocked") {
+            task.status = "Overdue";
+        }
+        await task.save();
+
+        await logActivity(
+            task._id,
+            user._id,
+            "System",
+            null,
+            "System marked task as Overdue",
+            `Task "${task.title}" marked as Overdue.`
+        );
+    }
+};
+
+// Helper to bulk update overdue status
+const updateOverdueTasks = async () => {
+    const now = new Date();
+    await Task.updateMany(
+        { dueDate: { $lt: now }, status: { $nin: ["Completed", "Blocked", "Overdue"] } },
+        { $set: { isOverdue: true, status: "Overdue" } }
+    );
+    await Task.updateMany(
+        { dueDate: { $lt: now }, status: "Blocked", isOverdue: false },
+        { $set: { isOverdue: true } }
+    );
+    await Task.updateMany(
+        { status: "Overdue", isOverdue: false },
+        { $set: { isOverdue: true } }
+    );
+};
+
 //@desc Get all tasks (admin: all, User: only assigned tasks)
 //@route GET /api/tasks/
 //@access Private
 const getTasks = async (req, res) => {
     try {
+        await updateOverdueTasks();
         const { status } = req.query;
         let filter = {};
 
@@ -33,12 +77,12 @@ const getTasks = async (req, res) => {
         let tasks;
 
         if (req.user.role === "admin"){
-            tasks = await Task.find(filter).populate(
+            tasks = await Task.find(filter).sort({ isOverdue: -1, createdAt: -1 }).populate(
                 "assignedTo",
                 "name email profileImageUrl"
             );
         } else {
-            tasks = await Task.find({ ...filter, assignedTo: req.user._id }).populate(
+            tasks = await Task.find({ ...filter, assignedTo: req.user._id }).sort({ isOverdue: -1, createdAt: -1 }).populate(
                 "assignedTo",
                 "name email profileImageUrl"
             );
@@ -47,6 +91,7 @@ const getTasks = async (req, res) => {
         //Add completed todoChecklist count to each task
         tasks = await Promise.all(
             tasks.map(async (task) => {
+                await checkOverdue(task, req.user); // Run overdue check
                 const completedCount = task.todoChecklist.filter(
                     (item) => item.completed
                 ).length;
@@ -77,13 +122,27 @@ const getTasks = async (req, res) => {
             ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
         });
 
+        const overdueTasks = await Task.countDocuments({
+            ...filter,
+            isOverdue: true,
+            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
+        });
+
+        const blockedTasks = await Task.countDocuments({
+            ...filter,
+            status: "Blocked",
+            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
+        });
+
         res.json({
             tasks,
-            statusSummery: {
+            statusSummary: {
                 all: allTasks,
                 pendingTasks,
                 inProgressTasks,
                 completedTasks,
+                overdueTasks,
+                blockedTasks,
             },
         });
     } catch (error) {
@@ -102,6 +161,7 @@ const getTaskById = async (req, res) => {
         );
 
         if (!task) return res.status(404).json({ message: "Task not found" });
+        await checkOverdue(task, req.user);
 
         res.json(task);
     } catch (error) {
@@ -270,19 +330,38 @@ const updateTaskStatus = async (req, res) => {
         const oldStatus = task.status;
         task.status = req.body.status || task.status;
 
+        // Blocked logic
+        if (task.status === "Blocked" && req.user.role !== "admin") {
+            return res.status(403).json({ message: "Only admins can block tasks" });
+        }
+
         if (task.status === "Completed") {
             task.todoChecklist.forEach((item) => (item.completed = true));
             task.progress = 100;
+            task.isOverdue = false; // Clear overdue state
         }
 
         if (oldStatus !== task.status) {
+            let action = "Status Changed";
+            let desc = `Status changed from "${oldStatus}" to "${task.status}".`;
+
+            if (task.status === "Blocked") {
+                action = "Task Blocked";
+                desc = "Admin blocked the task.";
+            } else if (oldStatus === "Blocked") {
+                action = "Task Unblocked";
+                desc = "Admin unblocked the task.";
+            } else if (task.status === "Completed" && oldStatus === "Overdue") {
+                desc = "Task completed and overdue status cleared.";
+            }
+
             await logActivity(
                 task._id,
                 req.user._id,
                 req.user.name,
                 req.user.profileImageUrl,
-                "Status Changed",
-                `Status changed from "${oldStatus}" to "${task.status}".`
+                action,
+                desc
             );
         }
 
@@ -305,6 +384,10 @@ const updateTaskChecklist = async (req, res) => {
 
         const isAssigned = task.assignedTo.some(id => id.equals(req.user._id));
 
+        if (task.status === "Blocked" && req.user.role !== "admin") {
+            return res.status(403).json({ message: "Task is blocked. Cannot update checklist." });
+        }
+
         if (!isAssigned && req.user.role !== "admin") {
             return res 
             .status(403)
@@ -323,12 +406,15 @@ const updateTaskChecklist = async (req, res) => {
         totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
 
         //Auto-mark task as completed if all items are checked
-        if (task.progress === 100) {
-            task.status = "Completed";
-        } else if (task.progress > 0) {
-            task.status = "In Progress";
-        } else {
-            task.status = "Pending";
+        if (task.status !== "Blocked") {
+            if (task.progress === 100) {
+                task.status = "Completed";
+                task.isOverdue = false;
+            } else if (task.progress > 0 && task.status !== "Overdue") {
+                task.status = "In Progress";
+            } else if (task.progress === 0 && task.status !== "Overdue") {
+                task.status = "Pending";
+            }
         }
 
         await task.save();
@@ -362,17 +448,16 @@ const updateTaskChecklist = async (req, res) => {
 //@access Private
 const getDashboardData = async (req, res) => {
     try {
+        await updateOverdueTasks();
         //Fetch statistics
         const totalTasks = await Task.countDocuments();
         const pendingTasks = await Task.countDocuments({ status: "Pending" });
         const completedTasks = await Task.countDocuments({ status: "Completed" });
-        const overdueTask = await Task.countDocuments({
-            status: { $ne: "Completed" },
-            dueDate: { $lt: new Date() },
-        });
+        const overdueTasks = await Task.countDocuments({ status: "Overdue" });
+        const blockedTasks = await Task.countDocuments({ status: "Blocked" });
 
         //Ensure all possible statuses are included
-        const taskStatuses = ["Pending", "In Progress", "Completed"];
+        const taskStatuses = ["Pending", "In Progress", "Completed", "Overdue", "Blocked"];
         const taskDistributionRaw = await Task.aggregate([
             {
                 $group: {
@@ -416,7 +501,8 @@ const getDashboardData = async (req, res) => {
                 totalTasks,
                 pendingTasks,
                 completedTasks,
-                overdueTask,
+                overdueTasks,
+                blockedTasks
             },
             charts: {
                 taskDistribution,
@@ -434,20 +520,18 @@ const getDashboardData = async (req, res) => {
 //@access Private
 const getUserDashboardData = async (req, res) => {
     try {
+        await updateOverdueTasks();
         const userId = req.user._id; //Only fetch data for the logged-in user
 
         //Fetch statistics for user-spcific tasks
         const totalTasks = await Task.countDocuments({ assignedTo: userId });
         const pendingTasks = await Task.countDocuments({ assignedTo: userId, status: "Pending" });
         const completedTasks = await Task.countDocuments({ assignedTo: userId, status: "Completed" });
-        const overdueTasks = await Task.countDocuments({
-            assignedTo: userId,
-            status: { $ne: "Completed" },
-            dueDate: { $lt: new Date() },
-        });
+        const overdueTasks = await Task.countDocuments({ assignedTo: userId, isOverdue: true });
+        const blockedTasks = await Task.countDocuments({ assignedTo: userId, status: "Blocked" });
 
         //Task distribution by status
-        const taskStatuses = ["Pending", "In Progress", "Completed"];
+        const taskStatuses = ["Pending", "In Progress", "Completed", "Overdue", "Blocked"];
         const taskDistributionRaw = await Task.aggregate([
             { $match: { assignedTo: userId } },
             { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -486,6 +570,7 @@ const getUserDashboardData = async (req, res) => {
                 pendingTasks,
                 completedTasks,
                 overdueTasks,
+                blockedTasks
             },
             charts: {
                 taskDistribution,
@@ -522,6 +607,41 @@ const getTaskActivity = async (req, res) => {
     }
   };
 
+//@desc Handle user deletion (Check dependencies and remove from tasks)
+//@route DELETE /api/tasks/cleanup-user/:userId
+//@access Private (Admin)
+const handleUserDeletion = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Find tasks assigned to this user
+        const tasks = await Task.find({ assignedTo: userId });
+
+        // Check for tasks where this user is the ONLY assignee and task is not completed
+        const blockingTasks = tasks.filter(t => 
+            t.assignedTo.length === 1 && 
+            t.assignedTo[0].toString() === userId && 
+            t.status !== 'Completed'
+        );
+
+        if (blockingTasks.length > 0) {
+            return res.status(409).json({
+                message: `Cannot delete user. They are the sole assignee on: ${blockingTasks.map(t => t.title).join(', ')}. Please assign another user first.`
+            });
+        }
+
+        // Remove user from all tasks
+        await Task.updateMany(
+            { assignedTo: userId },
+            { $pull: { assignedTo: userId } }
+        );
+
+        res.status(200).json({ message: "User removed from tasks." });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 module.exports = {
     getTasks,
     getTaskById,
@@ -533,4 +653,5 @@ module.exports = {
     getDashboardData,
     getUserDashboardData,
     getTaskActivity,
+    handleUserDeletion,
 };

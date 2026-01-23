@@ -1,6 +1,6 @@
 const express = require("express");
 const { protect, adminOnly } = require("../middlewares/authMiddleware");
-const { getDashboardData, getUserDashboardData, getTasks, getTaskById, createTask, updateTask, deleteTask, updateTaskStatus, updateTaskChecklist, getTaskActivity } = require("../controllers/taskController");
+const { getDashboardData, getUserDashboardData, getTasks, getTaskById, createTask, updateTask, deleteTask, updateTaskStatus, updateTaskChecklist, getTaskActivity, handleUserDeletion } = require("../controllers/taskController");
 
 const router = express.Router();
 
@@ -15,5 +15,6 @@ router.put("/:id", protect, updateTask); //Update task details
 router.delete("/:id", protect, adminOnly, deleteTask); //Delete a task (Admin only)
 router.put("/:id/status", protect, updateTaskStatus); //Update task status
 router.put("/:id/todo", protect, updateTaskChecklist); //Update task checklist
+router.delete("/cleanup-user/:userId", protect, adminOnly, handleUserDeletion); //Cleanup user from tasks before deletion
 
 module.exports = router;

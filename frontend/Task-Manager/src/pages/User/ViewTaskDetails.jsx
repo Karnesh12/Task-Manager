@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { useParams } from "react-router-dom";
 import axiosInstance from "../../utils/axiosInstance";
 import toast from "react-hot-toast";
@@ -8,10 +8,12 @@ import moment from "moment";
 import ActivityLog from "../../components/ActivityLog";
 import AvatarGroup from "../../components/AvatarGroup";
 import { LuSquareArrowOutUpRight } from "react-icons/lu";
+import { UserContext } from "../../context/userContext";
 
 const ViewTaskDetails = () => {
 
     const { id } = useParams();
+    const { user } = useContext(UserContext);
     const [task, setTask] = useState(null);
     const [loading, setLoading] = useState(true);
     const [updatingTodo, setUpdatingTodo] = useState(null);
@@ -23,6 +25,12 @@ const ViewTaskDetails = () => {
 
             case "Completed":
                 return "text-lime-500 bg-lime-50 border border-lime-500/20";
+
+            case "Overdue":
+                return "text-red-500 bg-red-50 border border-red-500/10";
+
+            case "Blocked":
+                return "text-gray-500 bg-gray-50 border border-gray-500/10";
 
             default:
                 return "text-violet-500 bg-violet-50 border border-violet-500/10";
@@ -50,6 +58,11 @@ const ViewTaskDetails = () => {
 
     // handle todo check
     const updateTodoChecklist = async (index) => {
+        if (task.status === "Blocked" && user.role !== "admin") {
+            toast.error("Task is blocked. You cannot update the checklist.");
+            return;
+        }
+
         setUpdatingTodo(index);
 
         const newChecklist = task.todoChecklist.map((item, i) =>
@@ -130,6 +143,7 @@ const ViewTaskDetails = () => {
                                     ? moment(task?.dueDate).format("Do MMM YYYY")
                                     : "N/A"
                                 }
+                                isRed={task?.isOverdue}
                                 />
                             </div>
                             <div className="col-span-6 md:col-span-4">
@@ -195,11 +209,11 @@ const ViewTaskDetails = () => {
 
 export default ViewTaskDetails;
 
-const InfoBox = ({ label,value }) => {
+const InfoBox = ({ label,value, isRed }) => {
     return <>
     <label className="text-xs font-medium text-slate-500">{label}</label>
     
-    <p className="text-[12px] md:text-[13px] font-medium text-gray-700 mt-0.5">
+    <p className={`text-[12px] md:text-[13px] font-medium mt-0.5 ${isRed ? 'text-red-500' : 'text-gray-700'}`}>
         {value}
     </p></>
 };

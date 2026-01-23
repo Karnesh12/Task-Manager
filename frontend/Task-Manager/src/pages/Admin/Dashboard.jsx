@@ -134,6 +134,14 @@ const Dashboard = () => {
                 )}
                 color="bg-lime-500"
                 />
+
+                <InfoCard
+                label="Overdue Tasks"
+                value={addThousandsSeparator(
+                    dashboardData?.statistics?.overdueTask || 0
+                )}
+                color="bg-red-500"
+                />
             </div>
         </div>
 

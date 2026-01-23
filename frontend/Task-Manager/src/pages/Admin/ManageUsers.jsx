@@ -4,6 +4,8 @@ import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { LuFileSpreadsheet } from "react-icons/lu";
 import UserCard from "../../components/Cards/UserCard";
+import Modal from "../../components/Modal";
+import DeleteAlert from "../../components/DeleteAlert";
 import toast from "react-hot-toast";
 
 const ManageUsers = () => {
@@ -11,6 +13,8 @@ const ManageUsers = () => {
     const [allUsers, setAllUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [openDeleteAlert, setOpenDeleteAlert] = useState(false);
+    const [userToDelete, setUserToDelete] = useState(null);
 
     const getAllUsers = async () => {
         setLoading(true);
@@ -51,6 +55,37 @@ const ManageUsers = () => {
         }
     };
 
+    const handleDeleteClick = (user) => {
+        setUserToDelete(user);
+        setOpenDeleteAlert(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!userToDelete) return;
+
+        try {
+            // Step 1: Check dependencies and remove from tasks
+            await axiosInstance.delete(API_PATHS.TASKS.CLEANUP_USER_TASKS(userToDelete._id));
+
+            // Step 2: Delete the user
+            await axiosInstance.delete(API_PATHS.USERS.DELETE_USER(userToDelete._id));
+
+            toast.success("User deleted successfully");
+            setOpenDeleteAlert(false);
+            getAllUsers(); // Refresh list
+        } catch (error) {
+            console.error("Error deleting user:", error);
+            if (error.response && error.response.status === 409) {
+                // Show the specific blocking message from backend
+                toast.error(error.response.data.message, {
+                    duration: 5000,
+                });
+            } else {
+                toast.error("Failed to delete user. Please try again.");
+            }
+        }
+    };
+
     useEffect(() => {
         getAllUsers();
 
@@ -76,13 +111,24 @@ const ManageUsers = () => {
                 ) : allUsers?.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                         {allUsers?.map((user) => (
-                            <UserCard key={user._id} userInfo={user} />
+                            <UserCard key={user._id} userInfo={user} onDelete={() => handleDeleteClick(user)} />
                         ))}
                     </div>
                 ) : (
                     <div className="flex items-center justify-center h-[40vh] text-gray-500">No users found.</div>
                 )}
             </div>
+
+            <Modal
+                isOpen={openDeleteAlert}
+                onClose={() => setOpenDeleteAlert(false)}
+                title="Delete User"
+            >
+                <DeleteAlert
+                    content={`Are you sure you want to delete ${userToDelete?.name}? This action cannot be undone.`}
+                    onDelete={handleConfirmDelete}
+                />
+            </Modal>
         </DashboardLayout>
     )
 }

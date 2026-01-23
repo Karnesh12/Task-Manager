@@ -29,14 +29,15 @@ const MyTasks = () => {
 
             setAllTasks(response.data?.tasks?.length > 0 ? response.data.tasks : []);
 
-            //Map statusSummery data with fixed labels and order
-            const statusSummery = response.data?.statusSummery || {};
+            //Map statusSummary data with fixed labels and order
+            const statusSummary = response.data?.statusSummary || {};
 
             const statusArray = [
-                { label: "All", count: statusSummery.all || 0 },
-                { label: "Pending", count: statusSummery.pendingTasks || 0 },
-                { label: "In Progress", count: statusSummery.inProgressTasks || 0 },
-                { label: "Completed", count: statusSummery.completedTasks || 0 },
+                { label: "All", count: statusSummary.all || 0 },
+                { label: "Pending", count: statusSummary.pendingTasks || 0 },
+                { label: "In Progress", count: statusSummary.inProgressTasks || 0 },
+                { label: "Completed", count: statusSummary.completedTasks || 0 },
+                { label: "Overdue", count: statusSummary.overdueTasks || 0 },
             ];
 
             setTabs(statusArray);

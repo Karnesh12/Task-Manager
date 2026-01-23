@@ -1,6 +1,7 @@
 import React from 'react'
+import { LuTrash2 } from "react-icons/lu";
 
-function UserCard({userInfo}) {
+function UserCard({userInfo, onDelete}) {
   return (
     <div className="user-card p-2">
         <div className="flex items-center justify-between">
@@ -16,6 +17,15 @@ function UserCard({userInfo}) {
                     <p className="text-xs text-gray-500">{userInfo?.email}</p>
                 </div>
             </div>
+
+            {userInfo?.role !== "admin" && (
+                <button
+                    onClick={onDelete}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                >
+                    <LuTrash2 className="text-lg" />
+                </button>
+            )}
         </div>
 
         <div className="flex items-end  gap-3 mt-5">
@@ -36,6 +46,12 @@ function UserCard({userInfo}) {
             count={userInfo?.completedTasks || 0}
             status="Completed"
             />
+
+            <StatCard
+            label="Overdue"
+            count={userInfo?.overdueTasks || userInfo?.overdueTask || userInfo?.overdue || 0}
+            status="Overdue"
+            />
         </div>
     </div>
   )
@@ -52,6 +68,9 @@ const StatCard = ({ label, count, status }) => {
 
             case "Completed":
                 return "text-indigo-500 bg-gray-50";
+
+            case "Overdue":
+                return "text-red-500 bg-gray-50";
 
             default:
                 return "text-violet-500 bg-gray-50"

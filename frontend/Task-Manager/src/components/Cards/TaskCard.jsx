@@ -13,6 +13,12 @@ const TaskCard = ({ title, description, priority, status, progress, createdAt, d
             case "Completed":
                 return "text-lime-500 bg-lime-50 border border-lime-500/20";
                 
+            case "Overdue":
+                return "text-red-500 bg-red-50 border border-red-500/10";
+
+            case "Blocked":
+                return "text-gray-500 bg-gray-50 border border-gray-500/10";
+
             default:
                 return "text-violet-500 bg-violet-50 border border-violet-500/10";
         }
@@ -87,7 +93,7 @@ const TaskCard = ({ title, description, priority, status, progress, createdAt, d
 
                 <div>
                     <label className="text-xs text-gray-500">Due Date</label>
-                    <p className="text-[13px] font-medium text-gray-900">
+                    <p className={`text-[13px] font-medium ${status === 'Overdue' ? 'text-red-500' : 'text-gray-900'}`}>
                         {moment(dueDate).format("Do MMM YYYY")}
                     </p>
                 </div>
